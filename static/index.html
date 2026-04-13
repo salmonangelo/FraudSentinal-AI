@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FraudSentinel — Fraud Analyst Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-left">FRAUDSENTINEL v1.0</div>
+      <div class="header-center">LIVE MONITORING</div>
+      <div class="header-right">
+        <span class="status-dot" id="status-dot"></span>
+        STREAM ACTIVE
+        <time id="live-clock">--:--:--</time>
+      </div>
+    </header>
+
+    <section class="stats-bar" aria-label="Session statistics">
+      <div class="stat-group">
+        <div class="stat-label">TRANSACTIONS</div>
+        <div class="stat-value" id="stat-total">0</div>
+      </div>
+      <div class="stat-group">
+        <div class="stat-label">FRAUD DETECTED</div>
+        <div class="stat-value">
+          <span id="stat-fraud-count">0</span>
+          <span id="stat-fraud-pct">(0.0%)</span>
+        </div>
+      </div>
+      <div class="stat-group">
+        <div class="stat-label">AVG RISK</div>
+        <div class="stat-value" id="stat-avg-risk">0.0</div>
+      </div>
+      <div class="stat-group">
+        <div class="stat-label">LATENCY</div>
+        <div class="stat-value"><span id="stat-latency">—</span><span> ms</span></div>
+      </div>
+    </section>
+
+    <main class="main-layout">
+      <!-- LEFT: Transaction Feed -->
+      <section class="column-feed" aria-label="Transaction feed">
+        <div class="feed-header">
+          <h2 class="feed-title">TRANSACTION FEED <span id="feed-count">(0)</span></h2>
+        </div>
+        <div class="table-wrap">
+          <table class="feed-table">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">AMOUNT</th>
+                <th scope="col">MERCHANT</th>
+                <th scope="col">HOUR</th>
+                <th scope="col">RISK</th>
+                <th scope="col">VERDICT</th>
+                <th scope="col">TIME</th>
+              </tr>
+            </thead>
+            <tbody id="feed-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CENTER: Threat Level & Feature Attribution -->
+      <section class="column-center" aria-label="Risk analysis">
+        <div class="risk-section">
+          <div class="threat-label">THREAT LEVEL</div>
+          <div class="threat-bar" id="threat-level-bar">
+            <div class="threat-segment" data-level="0">LOW</div>
+            <div class="threat-segment" data-level="1">GUARDED</div>
+            <div class="threat-segment" data-level="2">ELEVATED</div>
+            <div class="threat-segment" data-level="3">HIGH</div>
+            <div class="threat-segment" data-level="4">CRITICAL</div>
+          </div>
+          <div class="risk-display" id="gauge-risk">—</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="feature-section">
+          <div class="feature-label">FEATURE ATTRIBUTION</div>
+          <div class="shap-bars" id="shap-chart"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Selected Transaction Detail Panel -->
+      <aside class="column-right" aria-label="Transaction details">
+        <!-- Empty State -->
+        <div class="right-panel" id="default-panel">
+          <div class="empty-state">
+            <div class="empty-title">SELECT A TRANSACTION</div>
+            <div class="empty-subtitle">Click any row to view details</div>
+          </div>
+        </div>
+
+        <!-- Selected Transaction State -->
+        <div class="right-panel hidden" id="analyst-panel">
+          <!-- Header with Verdict Badge -->
+          <div class="panel-header" id="alert-header">
+            <span class="verdict-badge" id="header-verdict">FRAUD</span>
+            <span class="header-txn-id" id="header-txn-id">TXN-000000</span>
+          </div>
+
+          <!-- Transaction Details -->
+          <div class="panel-section">
+            <div class="field-row">
+              <span class="field-label">AMOUNT</span>
+              <span class="field-value" id="alert-amount">—</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">MERCHANT</span>
+              <span class="field-value" id="alert-merchant">—</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">HOUR</span>
+              <span class="field-value" id="alert-hour">—</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">RISK</span>
+              <span class="field-value" id="alert-risk">—</span>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- AI Explanation -->
+          <div class="panel-section">
+            <div class="section-label">AI EXPLANATION</div>
+            <div class="explanation-text" id="explain-text">Waiting...</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Action Buttons -->
+          <div class="panel-section">
+            <button class="action-btn action-block" title="Demo mode">BLOCK CARD</button>
+            <button class="action-btn action-otp" title="Demo mode">SEND OTP</button>
+            <button class="action-btn action-approve" title="Demo mode">APPROVE</button>
+            <div class="demo-text">Demo mode — actions disabled</div>
+          </div>
+
+          <!-- Open Full Analysis Link -->
+          <div class="analysis-link-container">
+            <a href="#" id="open-analysis-btn" class="analysis-link" onclick="openFullAnalysis(); return false;">
+              OPEN FULL ANALYSIS ↗
+            </a>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="app-footer">
+      <p class="footer-text">
+        MODEL: XGBoost + IsolationForest | LLM: Mistral 7B local | RAG: ChromaDB 50 cases | THRESHOLD: 0.3166
+      </p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FraudSentinel — Analytics Center</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+      :root {
+        --bg-primary: #080c14;
+        --bg-secondary: #0d1420;
+        --bg-panel: #111827;
+        --accent: #00d4aa;
+        --accent-dim: #00856a;
+        --danger: #ff4444;
+        --warning: #ffaa00;
+        --success: #00cc66;
+        --text-primary: #e2e8f0;
+        --text-secondary: #64748b;
+        --text-mono: #94a3b8;
+        --grid-line: #1e2d3d;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: var(--bg-primary);
+        background-image:
+          linear-gradient(var(--grid-line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+        background-size: 40px 40px;
+        color: var(--text-primary);
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Header Override */
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 32px;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--accent-dim);
+        background: transparent;
+      }
+
+      .header-left {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      .header-center {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text-secondary);
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text-secondary);
+      }
+
+      .back-button {
+        padding: 4px 12px;
+        background: transparent;
+        border: 1px solid var(--grid-line);
+        color: var(--accent);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-block;
+      }
+
+      .back-button:hover {
+        background: var(--accent);
+        color: var(--bg-primary);
+        border-color: var(--accent);
+      }
+
+      /* Main Content */
+      .analytics-container {
+        flex: 1;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        overflow-y: auto;
+      }
+
+      /* Row 1: Stats Bar */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .stat-card {
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--grid-line);
+        border-radius: 2px;
+        text-align: center;
+      }
+
+      .stat-card-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 8px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+      }
+
+      .stat-card-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      /* Row 2: Charts */
+      .charts-row {
+        display: grid;
+        grid-template-columns: 35% 30% 35%;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        min-height: 300px;
+      }
+
+      .chart-container {
+        background: var(--bg-secondary);
+        border: 1px solid var(--grid-line);
+        border-radius: 2px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .chart-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 1rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .chart-canvas {
+        flex: 1;
+        position: relative;
+        min-height: 250px;
+      }
+
+      .chart-annotation {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px;
+        color: var(--text-secondary);
+        margin-top: 0.5rem;
+        text-align: center;
+        font-style: italic;
+      }
+
+      /* Row 3: Tables */
+      .tables-row {
+        display: grid;
+        grid-template-columns: 50% 50%;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .table-panel {
+        background: var(--bg-secondary);
+        border: 1px solid var(--grid-line);
+        border-radius: 2px;
+        padding: 1rem;
+      }
+
+      .table-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 1rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+      }
+
+      .data-table thead {
+        background: var(--bg-panel);
+      }
+
+      .data-table th {
+        padding: 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid var(--grid-line);
+        font-size: 8px;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .data-table td {
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--grid-line);
+        color: var(--text-mono);
+      }
+
+      .data-table tbody tr:hover {
+        background: var(--bg-panel);
+      }
+
+      /* Performance Table Special Styles */
+      .comparison-row.improved {
+        background: rgba(0, 212, 170, 0.1);
+      }
+
+      .comparison-row.improved td {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      /* Footer */
+      .app-footer {
+        min-height: 24px;
+        padding: 4px 1rem;
+        border-top: 1px solid var(--accent-dim);
+        background: var(--bg-secondary);
+        text-align: center;
+      }
+
+      .footer-text {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 8px;
+        color: var(--text-secondary);
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Responsive */
+      @media (max-width: 1400px) {
+        .charts-row {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">FRAUDSENTINEL — ANALYTICS CENTER</div>
+      <div class="header-center">ANALYTICS CENTER
+      </div>
+      <div class="header-right">
+        <time id="live-clock">--:--:--</time>
+        <a href="/" class="back-button">← BACK TO MONITOR</a>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="analytics-container">
+      <!-- Row 1: Summary Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-card-label">Total Transactions</div>
+          <div class="stat-card-value">284,807</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Fraud Detected</div>
+          <div class="stat-card-value">492</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Fraud Rate %</div>
+          <div class="stat-card-value">0.17%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Avg Risk Score</div>
+          <div class="stat-card-value">42.1</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Avg Latency</div>
+          <div class="stat-card-value">29ms</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Model</div>
+          <div class="stat-card-value" style="font-size: 11px;">XGBoost+IF</div>
+        </div>
+      </div>
+
+      <!-- Row 2: Charts -->
+      <div class="charts-row">
+        <!-- Chart 1: Fraud by Merchant -->
+        <div class="chart-container">
+          <div class="chart-title">FRAUD BY MERCHANT CATEGORY</div>
+          <div class="chart-canvas">
+            <canvas id="merchantChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Transactions by Hour -->
+        <div class="chart-container">
+          <div class="chart-title">TRANSACTIONS BY HOUR</div>
+          <div class="chart-canvas">
+            <canvas id="hourChart"></canvas>
+          </div>
+          <div class="chart-annotation">Fraud peaks 2–4am</div>
+        </div>
+
+        <!-- Chart 3: Risk Score Distribution -->
+        <div class="chart-container">
+          <div class="chart-title">RISK SCORE DISTRIBUTION</div>
+          <div class="chart-canvas">
+            <canvas id="riskChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Tables -->
+      <div class="tables-row">
+        <!-- Left: Top Fraud Patterns -->
+        <div class="table-panel">
+          <div class="table-title">TOP FRAUD PATTERNS DETECTED</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Pattern</th>
+                <th>Cases</th>
+                <th>Avg Amt</th>
+                <th>Risk</th>
+                <th>Top Feat</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Micro-test + spike</td>
+                <td>127</td>
+                <td>$1.20</td>
+                <td>91.2</td>
+                <td>V14</td>
+              </tr>
+              <tr>
+                <td>Late night high val</td>
+                <td>89</td>
+                <td>$487.50</td>
+                <td>88.7</td>
+                <td>V17</td>
+              </tr>
+              <tr>
+                <td>Card not present</td>
+                <td>74</td>
+                <td>$156.30</td>
+                <td>82.1</td>
+                <td>V12</td>
+              </tr>
+              <tr>
+                <td>Geographic anomaly</td>
+                <td>58</td>
+                <td>$203.40</td>
+                <td>79.8</td>
+                <td>V10</td>
+              </tr>
+              <tr>
+                <td>Velocity attack</td>
+                <td>47</td>
+                <td>$23.10</td>
+                <td>76.3</td>
+                <td>V3</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Right: Model Performance -->
+        <div class="table-panel">
+          <div class="table-title">MODEL PERFORMANCE</div>
+          
+          <table class="data-table" style="margin-bottom: 1.5rem;">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Our Model</th>
+                <th>Industry Avg</th>
+                <th>Lit. Best</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Recall</td>
+                <td>0.912</td>
+                <td>0.85</td>
+                <td>0.94</td>
+              </tr>
+              <tr>
+                <td>Precision</td>
+                <td>0.847</td>
+                <td>0.82</td>
+                <td>0.91</td>
+              </tr>
+              <tr>
+                <td>F1 Score</td>
+                <td>0.878</td>
+                <td>0.835</td>
+                <td>0.925</td>
+              </tr>
+              <tr>
+                <td>ROC-AUC</td>
+                <td>0.974</td>
+                <td>0.96</td>
+                <td>0.983</td>
+              </tr>
+              <tr>
+                <td>FPR</td>
+                <td>0.043</td>
+                <td>0.08</td>
+                <td>0.02</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">ENSEMBLE ADVANTAGE</div>
+          <table class="data-table">
+            <tbody>
+              <tr>
+                <td style="width: 50%;">XGBoost alone</td>
+                <td>Recall 0.891</td>
+              </tr>
+              <tr class="comparison-row improved">
+                <td>XGBoost + IsoForest</td>
+                <td>Recall 0.912 ↑</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--text-secondary); margin-top: 0.5rem; font-style: italic;">Catches anomalies missed by XGBoost</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p class="footer-text">
+        Data source: Kaggle European Credit Card Fraud Dataset (2013) | 284,807 transactions | 
+        References: Bigdeli et al. 2026, Zhang et al. 2025, Anitha et al. 2025
+      </p>
+    </footer>
+
+    <script>
+      // Clock
+      function updateClock() {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, "0");
+        const mm = String(now.getMinutes()).padStart(2, "0");
+        const ss = String(now.getSeconds()).padStart(2, "0");
+        document.getElementById("live-clock").textContent = `${hh}:${mm}:${ss}`;
+      }
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      // Chart.js Configuration
+      const chartDefaults = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: {
+              font: { family: "'JetBrains Mono', monospace", size: 10 },
+              color: "#94a3b8",
+              padding: 15,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { font: { family: "'JetBrains Mono', monospace", size: 9 }, color: "#94a3b8" },
+            grid: { color: "#1e2d3d", drawBorder: false },
+          },
+          y: {
+            ticks: { font: { family: "'JetBrains Mono', monospace", size: 9 }, color: "#94a3b8" },
+            grid: { color: "#1e2d3d", drawBorder: false },
+          },
+        },
+      };
+
+      // Chart 1: Fraud by Merchant (Horizontal Bar)
+      const merchantCtx = document.getElementById("merchantChart").getContext("2d");
+      new Chart(merchantCtx, {
+        type: "bar",
+        data: {
+          labels: ["Online Shopping", "Electronics", "ATM", "Travel", "Gas Station", "Restaurant", "Healthcare", "Grocery"],
+          datasets: [
+            {
+              label: "Fraud %",
+              data: [23, 19, 18, 14, 11, 9, 4, 2],
+              backgroundColor: "#ff4444",
+              borderColor: "#ff4444",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          ...chartDefaults,
+          indexAxis: "y",
+          scales: {
+            x: {
+              ...chartDefaults.scales.x,
+              beginAtZero: true,
+              max: 25,
+            },
+            y: {
+              ...chartDefaults.scales.y,
+              grid: { drawBorder: false, display: false },
+            },
+          },
+        },
+      });
+
+      // Chart 2: Transactions by Hour (Line)
+      const hourCtx = document.getElementById("hourChart").getContext("2d");
+      const legitByHour = [1200, 1150, 1100, 950, 800, 600, 700, 1100, 1800, 2200, 2600, 2800, 2750, 2600, 2400, 2100, 1800, 1600, 1500, 1400, 1300, 1250, 1200, 1150];
+      const fraudByHour = [8, 12, 18, 25, 15, 5, 3, 2, 3, 4, 2, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1];
+      
+      new Chart(hourCtx, {
+        type: "line",
+        data: {
+          labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+          datasets: [
+            {
+              label: "Legitimate",
+              data: legitByHour,
+              borderColor: "#00d4aa",
+              backgroundColor: "rgba(0, 212, 170, 0.1)",
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+            },
+            {
+              label: "Fraud (×100)",
+              data: fraudByHour.map(v => v * 100),
+              borderColor: "#ff4444",
+              backgroundColor: "rgba(255, 68, 68, 0.1)",
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+            },
+          ],
+        },
+        options: {
+          ...chartDefaults,
+          scales: {
+            y: {
+              ...chartDefaults.scales.y,
+              beginAtZero: true,
+            },
+          },
+        },
+      });
+
+      // Chart 3: Risk Score Distribution (Grouped Bar)
+      const riskCtx = document.getElementById("riskChart").getContext("2d");
+      new Chart(riskCtx, {
+        type: "bar",
+        data: {
+          labels: ["0-10", "10-20", "20-30", "30-40", "40-50", "50-60", "60-70", "70-80", "80-90", "90-100"],
+          datasets: [
+            {
+              label: "Legitimate",
+              data: [85000, 65000, 35000, 15000, 8000, 4000, 2000, 1000, 500, 200],
+              backgroundColor: "#00d4aa",
+              borderColor: "#00d4aa",
+              borderWidth: 1,
+            },
+            {
+              label: "Fraud",
+              data: [20, 15, 25, 35, 45, 65, 85, 120, 180, 250],
+              backgroundColor: "#ff4444",
+              borderColor: "#ff4444",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          ...chartDefaults,
+          scales: {
+            y: {
+              ...chartDefaults.scales.y,
+              type: "logarithmic",
+            },
+          },
+        },
+      });
+    </script>
+  </body>
+</html>

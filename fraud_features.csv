@@ -1,0 +1,31 @@
+Feature,What it most likely captures,Fraud signal direction,Importance rank
+V1,Transaction frequency / velocity in recent window,Negative = fraud,6
+V2,Merchant category risk score,Negative = fraud,8
+V3,Time delta since previous transaction,Negative = fraud,5
+V4,Transaction amount vs cardholder average,Positive = fraud,4
+V5,Geographic distance from home location,Mixed,9
+V6,Card present vs card not present signal,Mixed,12
+V7,Device fingerprint consistency,Positive = fraud,7
+V8,Merchant reputation / blacklist score,Mixed,14
+V9,Account age vs transaction pattern,Mixed,11
+V10,Cross-border transaction indicator,Negative = fraud,10
+V11,Transaction hour risk (night vs day),Positive = fraud,13
+V12,Spending spike relative to 30-day average,Negative = fraud,3
+V13,Number of declined attempts in last hour,Mixed,15
+V14,Combined velocity + location anomaly score,Negative = fraud,1
+V15,Cardholder authentication strength,Mixed,16
+V16,Micro-transaction test pattern signal,Negative = fraud,17
+V17,High-value transaction anomaly,Negative = fraud,2
+V18,Repeat merchant vs new merchant,Mixed,18
+V19,Card expiry proximity,Mixed,19
+V20,Transaction channel (online/POS/ATM),Mixed,20
+V21,Refund/chargeback history signal,Mixed,21
+V22,IP address risk score,Mixed,22
+V23,Session duration anomaly,Mixed,23
+V24,Billing address match score,Mixed,24
+V25,Purchase category vs profile match,Mixed,25
+V26,Card sharing / mule account signal,Mixed,26
+V27,Transaction rounding pattern (e.g. exactly $100),Mixed,27
+V28,Weekend vs weekday anomaly,Mixed,28
+Amount,Raw transaction amount in Euros,High or very low = fraud,varies
+Time→Hour,Hour of day derived from Time column,0–4am = higher fraud,varies

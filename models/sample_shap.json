@@ -1,0 +1,25 @@
+{
+  "test_row_index": 840,
+  "top_features": [
+    {
+      "feature": "V14",
+      "shap_value": 5.116015434265137
+    },
+    {
+      "feature": "V17",
+      "shap_value": 1.638648509979248
+    },
+    {
+      "feature": "V4",
+      "shap_value": 1.0045404434204102
+    },
+    {
+      "feature": "V7",
+      "shap_value": 0.7559663653373718
+    },
+    {
+      "feature": "V10",
+      "shap_value": 0.6733775734901428
+    }
+  ]
+}
