@@ -315,7 +315,7 @@ async function postExplainForPayload(payload) {
   } catch {
     box.classList.remove("loading");
     box.classList.remove("streaming");
-    currentExplanationText = "Explanation request failed. The API may be unreachable or Ollama may be offline.";
+    currentExplanationText = "Explanation request failed. The API may be unreachable or the Gemini API may be offline.";
     box.textContent = currentExplanationText;
     renderSimilarCases([]);
     renderGraphInsights([]);
@@ -382,7 +382,7 @@ function renderSelectedTransaction() {
 
   // Update explanation
   if (explainText) {
-    explainText.textContent = "Querying Mistral 7B ...";
+    explainText.textContent = "Querying Google Gemini ...";
     explainText.classList.add("loading");
   }
 

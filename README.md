@@ -12,7 +12,7 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 - 🔍 **Real-time Fraud Detection**: Upload transaction data and get instant fraud predictions
 - 🤖 **AI-Powered Analysis**: Uses XGBoost and ensemble methods for high accuracy
 - 📊 **Explainable AI**: SHAP-based feature importance explanations
-- 🔄 **RAG System**: Semantic search for similar fraud cases using ChromaDB and Ollama
+- 🔄 **RAG System**: Semantic search for similar fraud cases using ChromaDB and Google Gemini
 - 🌐 **Web Interface**: Modern, responsive UI built with HTML/CSS/JavaScript
 - 📈 **Model Training Pipeline**: Automated training with evaluation metrics
 - 🛡️ **Imbalanced Data Handling**: Techniques for fraud detection's class imbalance
@@ -27,7 +27,7 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 ### Prerequisites
 
 - Python 3.8+
-- Ollama (for AI features)
+- Google Gemini API key (for AI features)
 - Kaggle account (for dataset)
 
 ### Installation
@@ -65,14 +65,14 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 
 ### Running the Application
 
-1. **Start Ollama (in a separate terminal)**
+1. **Create a `.env` file**
    ```bash
-   ollama run mistral
+   echo GEMINI_API_KEY=your_key_here > .env
    ```
 
 2. **Start the web server**
    ```bash
-   uvicorn main:app --reload --port 8000
+   uvicorn main:create_app --factory --reload --port 8000
    ```
 
 3. **Open your browser**
@@ -122,5 +122,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Dataset from [Kaggle Credit Card Fraud Detection](https://www.kaggle.com/mlg-ulb/creditcardfraud)
-- Powered by [Ollama](https://ollama.ai/) and [Mistral AI](https://mistral.ai/)
+- Powered by [Google Gemini](https://developers.generativeai.google/) and [ChromaDB](https://www.trychroma.com/)
 - Built with [FastAPI](https://fastapi.tiangolo.com/) and [XGBoost](https://xgboost.readthedocs.io/)

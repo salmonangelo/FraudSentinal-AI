@@ -23,7 +23,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from ollama import Client as OllamaClient
+import google.generativeai as genai
+from dotenv import load_dotenv
+import os
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -263,7 +265,7 @@ def retrieve_rag_context(
     collection: chromadb.Collection,
     query_embedding: list[float],
     top_k: int,
-) -> list[str]:
+) :
     # Query Chroma with the transaction embedding (or text embedding) and return top_k document snippets for UI or LLM context.
     pass
 
@@ -337,31 +339,20 @@ SIMILAR CASES:
 2-sentence explanation:"""
 
 
-def _ollama_explain_chat(client: OllamaClient, prompt: str) -> str:
-    print("[EXPLAIN] Sending prompt to Mistral...")
-    resp = client.chat(
-        model="mistral:7b-instruct-q4_0",
-        messages=[{"role": "user", "content": prompt}],
-        stream=False,
-    )
-    try:
-        raw = resp["message"]["content"]
-    except (KeyError, TypeError):
-        try:
-            raw = resp.message.content
-        except Exception:
-            raw = str(resp)
-    explanation = str(raw).strip()
-    print("[EXPLAIN] Mistral responded:", explanation[:100])
+def _gemini_explain(model: Any, prompt: str) -> str:
+    print("[EXPLAIN] Sending prompt to Gemini...")
+    response = model.generate_content(prompt)
+    explanation = str(getattr(response, "text", "")).strip()
+    print("[EXPLAIN] Gemini responded:", explanation[:100])
     if not explanation or len(explanation) < 20:
-        raise ValueError("Empty response from Mistral")
+        raise ValueError("Empty response from Gemini")
     return explanation
 
 
 async def explain_transaction(
     body: ExplainRequest,
     collection: chromadb.Collection,
-    ollama_client: OllamaClient,
+    gemini_model: Any,
     graph: Any = None,
 ) -> ExplainResponse:
     search = _top_shap_search_string(body.shap_features, n=3)
@@ -394,7 +385,7 @@ async def explain_transaction(
     )
     try:
         explanation = await asyncio.wait_for(
-            asyncio.to_thread(_ollama_explain_chat, ollama_client, prompt),
+            asyncio.to_thread(_gemini_explain, gemini_model, prompt),
             timeout=30.0,
         )
         return ExplainResponse(
@@ -402,10 +393,10 @@ async def explain_transaction(
             explanation=explanation,
             similar_cases=similar[:3],
             graph_insights=graph_insights,
-            model="mistral:7b-instruct-q4_0",
+            model="gemini-1.5-flash",
         )
     except Exception as exc:
-        print("[EXPLAIN] Mistral exception:", repr(exc))
+        print("[EXPLAIN] Gemini exception:", repr(exc))
     return ExplainResponse(
         transaction_id=body.transaction_id,
         explanation=(
@@ -523,7 +514,7 @@ def register_routes(app: FastAPI) -> None:
         return await explain_transaction(
             body,
             state.chroma_collection,
-            state.ollama_client,
+            state.gemini_model,
             state.graph if hasattr(state, "graph") else None,
         )
 
@@ -561,41 +552,14 @@ def register_routes(app: FastAPI) -> None:
             similar_cases=similar_cases,
         )
 
-        ollama_body = {
-            "model": "mistral:7b-instruct-q4_0",
-            "prompt": prompt,
-            "stream": True,
-            "options": {
-                "temperature": 0.2,
-                "num_predict": 120,
-            }
-        }
-
         async def token_generator():
             yield f"data: {json.dumps({'type': 'metadata', 'graph_insights': graph_insights, 'similar_cases': similar})}\n\n"
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                async with client.stream(
-                    "POST",
-                    "http://localhost:11434/api/generate",
-                    json=ollama_body,
-                ) as response:
-                    async for line in response.aiter_lines():
-                        if not line.strip():
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                            token = chunk.get("response", "")
-                            done = chunk.get("done", False)
-
-                            if token:
-                                yield f"data: {json.dumps({'token': token})}\n\n"
-
-                            if done:
-                                yield f"data: {json.dumps({'done': True})}\n\n"
-                                break
-                        except json.JSONDecodeError:
-                            continue
+            try:
+                explanation = await asyncio.to_thread(_gemini_explain, state.gemini_model, prompt)
+                yield f"data: {json.dumps({'token': explanation})}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'token': 'Explanation generation failed.'})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
 
         return StreamingResponse(
             token_generator(),
@@ -654,28 +618,13 @@ async def _lifespan(app: FastAPI):
     app.state.chroma_client = chroma_client
     app.state.chroma_collection = fraud_collection
 
-    app.state.ollama_client = OllamaClient(
-        host="http://localhost:11434",
-        timeout=30.0,
-    )
+    load_dotenv()
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY is not set in environment or .env")
+    genai.configure(api_key=gemini_api_key)
+    app.state.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
     app.state.seeded_transaction_count = 0
-
-    # Pre-warm Ollama — loads model into GPU memory at startup
-    print("[startup] Pre-warming Ollama model...")
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            await client.post(
-                "http://localhost:11434/api/generate",
-                json={
-                    "model": "mistral:7b-instruct-q4_0",     # match your model name exactly
-                    "prompt": "ready",
-                    "stream": False,
-                    "options": {"num_predict": 1}   # generate 1 token — just enough to load
-                }
-            )
-        print("[startup] Ollama warm ✓")
-    except Exception as e:
-        print(f"[startup] Ollama pre-warm failed: {e}")
 
     print("[LIFESPAN] Loading creditcard dataset for synthetic transaction streaming (10,000 rows max)")
     creditcard_path = root / "data" / "creditcard.csv"
@@ -711,19 +660,6 @@ def create_app() -> FastAPI:
 
 # Create app instance for uvicorn to use when imported (e.g., uvicorn main:app)
 app = create_app()
-
-
-async def test_ollama():
-    import ollama
-
-    try:
-        response = ollama.chat(
-            model="mistral:7b-instruct-q4_0",
-            messages=[{"role": "user", "content": "Say hello in one sentence."}],
-        )
-        print("[OLLAMA TEST] Success:", response['message']['content'])
-    except Exception as e:
-        print("[OLLAMA TEST] Failed:", str(e))
 
 
 if __name__ == "__main__":
