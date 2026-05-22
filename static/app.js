@@ -199,7 +199,6 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-
 function renderSimilarCases(cases) {
   const wrap = document.getElementById("explain-similar");
   if (!wrap) return;
@@ -229,13 +228,36 @@ function renderSimilarCases(cases) {
   wrap.innerHTML = items;
 }
 
+function renderGraphInsights(insights) {
+  const wrap = document.getElementById("explain-graph");
+  if (!wrap) return;
+  if (!Array.isArray(insights) || insights.length === 0) {
+    wrap.innerHTML = "<div class=\"similar-empty\">No relational anomalies detected.</div>";
+    return;
+  }
+  const items = insights
+    .map((raw) => {
+      return `
+        <div class="graph-insight">
+          <span class="insight-icon">🔗</span>
+          <span class="insight-text">${escapeHtml(String(raw))}</span>
+        </div>
+      `;
+    })
+    .join("");
+  wrap.innerHTML = items;
+}
+
 async function postExplainForPayload(payload) {
   const box = document.getElementById("explain-text");
   const similarEl = document.getElementById("explain-similar");
+  const graphEl = document.getElementById("explain-graph");
   if (!box) return;
   box.classList.add("loading");
-  box.textContent = "Loading explanation...";
+  currentExplanationText = "Loading explanation...";
+  box.textContent = currentExplanationText;
   if (similarEl) similarEl.innerHTML = "";
+  if (graphEl) graphEl.innerHTML = "";
 
   const body = {
     transaction_id: String(payload.transaction_id || ""),
@@ -245,35 +267,58 @@ async function postExplainForPayload(payload) {
       : [],
     amount: Number(payload.amount),
     hour: Number(payload.hour),
+    merchant_category:
+      payload.merchant_category != null ? String(payload.merchant_category) : "",
+    features: payload.features || {},
   };
   try {
-    const res = await fetch("/explain", {
+    const res = await fetch("/api/investigate/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    box.textContent = "Querying Mistral 7B";
-    box.classList.add("loading");
-    const data = await res.json();
+    box.textContent = "";
     box.classList.remove("loading");
-    if (!res.ok) {
-      box.textContent =
-        data.detail != null
-          ? `Explanation unavailable: ${JSON.stringify(data.detail)}`
-          : "Explanation unavailable: server returned an error.";
-      renderSimilarCases([]);
-      return;
+    box.classList.add("streaming");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    currentExplanationText = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === 'metadata') {
+            renderSimilarCases(data.similar_cases);
+            renderGraphInsights(data.graph_insights);
+          }
+          if (data.token) {
+             currentExplanationText += data.token;
+             box.textContent = currentExplanationText;
+          }
+          if (data.done) {
+             box.classList.remove("streaming");
+          }
+        } catch (_) {}
+      }
     }
-    box.textContent =
-      data.explanation != null && String(data.explanation).trim() !== ""
-        ? String(data.explanation)
-        : "No explanation text was returned.";
-    renderSimilarCases(data.similar_cases);
   } catch {
     box.classList.remove("loading");
-    box.textContent =
-      "Explanation request failed. The API may be unreachable or Ollama may be offline.";
+    box.classList.remove("streaming");
+    currentExplanationText = "Explanation request failed. The API may be unreachable or Ollama may be offline.";
+    box.textContent = currentExplanationText;
     renderSimilarCases([]);
+    renderGraphInsights([]);
   }
 }
 
@@ -347,6 +392,34 @@ function renderSelectedTransaction() {
   
   if (openButton) openButton.classList.remove("hidden");
 }
+
+let currentExplanationText = "";
+
+function openExplanationModal() {
+  const modal = document.getElementById("explanation-modal");
+  const modalText = document.getElementById("modal-explanation-text");
+  if (!modal || !modalText) return;
+  
+  if (currentExplanationText) {
+    modalText.textContent = currentExplanationText;
+  } else {
+    modalText.textContent = "Explanation not available.";
+  }
+  
+  modal.classList.remove("hidden");
+}
+
+function closeExplanationModal() {
+  const modal = document.getElementById("explanation-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+  }
+}
+
+// Close modal on escape key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeExplanationModal();
+});
 
 function openFullAnalysis() {
   if (!selectedTransaction) return;

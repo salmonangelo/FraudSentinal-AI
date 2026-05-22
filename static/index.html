@@ -10,7 +10,7 @@
   <body>
     <header class="app-header">
       <div class="header-left">FRAUDSENTINEL v1.0</div>
-      <div class="header-center">LIVE MONITORING</div>
+      <div class="header-center"></div>
       <div class="header-right">
         <span class="status-dot" id="status-dot"></span>
         STREAM ACTIVE
@@ -129,12 +129,29 @@
           <!-- AI Explanation -->
           <div class="panel-section">
             <div class="section-label">AI EXPLANATION</div>
-            <div class="explanation-text" id="explain-text">Waiting...</div>
+            <div class="explanation-container" onclick="openExplanationModal()" title="Click to view full explanation">
+              <div class="explanation-text" id="explain-text">Waiting...</div>
+              <div class="explanation-overlay"><span class="overlay-text">CLICK TO EXPAND</span></div>
+            </div>
           </div>
 
           <div class="divider"></div>
 
-          <!-- Action Buttons -->
+          <!-- Graph Insights -->
+          <div class="panel-section">
+            <div class="section-label">GRAPH INSIGHTS</div>
+            <div id="explain-graph" class="graph-insights-list">
+              <div class="similar-empty">Select a fraud case to view connections.</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Similar Cases -->
+          <div class="panel-section">
+            <div class="section-label">SIMILAR CASES (RAG)</div>
+            <div id="explain-similar" class="similar-cases-list"></div>
+          </div>
           <div class="panel-section">
             <button class="action-btn action-block" title="Demo mode">BLOCK CARD</button>
             <button class="action-btn action-otp" title="Demo mode">SEND OTP</button>
@@ -157,5 +174,18 @@
         MODEL: XGBoost + IsolationForest | LLM: Mistral 7B local | RAG: ChromaDB 50 cases | THRESHOLD: 0.3166
       </p>
     </footer>
+
+    <!-- AI Explanation Modal -->
+    <div id="explanation-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeExplanationModal()">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">FULL AI EXPLANATION</h3>
+          <button class="modal-close" onclick="closeExplanationModal()" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-explanation-text">
+          <!-- Text loaded dynamically -->
+        </div>
+      </div>
+    </div>
   </body>
 </html>

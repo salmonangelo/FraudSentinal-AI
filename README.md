@@ -19,8 +19,8 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 
 ## 📸 Screenshots
 
-![Fraud Detection Interface](https://via.placeholder.com/800x400?text=Fraud+Detection+Dashboard)
-![Analysis Results](https://via.placeholder.com/800x400?text=Analysis+Results)
+![Fraud Detection Interface](dashboard.png)
+![Analysis Results](analysis.png)
 
 ## 🚀 Quick Start
 
@@ -41,7 +41,7 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 2. **Create virtual environment**
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv\Scripts\activate
    ```
 
 3. **Install dependencies**

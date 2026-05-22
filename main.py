@@ -10,6 +10,7 @@ import time
 import warnings
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import httpx
 from pathlib import Path
 from typing import Any, Literal
 
@@ -28,6 +29,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from rag_setup import DeterministicEmbeddingFunction
+from graph_module import build_graph, get_graph_insights
 
 # Suppress sklearn feature name mismatch warning (arrays don't have feature names)
 warnings.filterwarnings("ignore", message="X does not have valid feature names*")
@@ -159,12 +161,16 @@ class ExplainRequest(BaseModel):
     shap_features: list[ShapFeatureItem]
     amount: float
     hour: int = Field(ge=0, le=23)
+    merchant_category: str | None = None
+    # Add v1-v28 for KG reasoning
+    features: dict[str, float] = Field(default_factory=dict)
 
 
 class ExplainResponse(BaseModel):
     transaction_id: str
     explanation: str
     similar_cases: list[str]
+    graph_insights: list[str] = Field(default_factory=list)
     model: str
 
 
@@ -288,91 +294,124 @@ def _top_shap_search_string(shap_features: list[ShapFeatureItem], n: int = 3) ->
     return " ".join(f"{f.feature} impact {f.impact:.6f}" for f in ranked)
 
 
-def _build_explain_ollama_prompt(
-    amount: float,
-    hour: int,
-    risk_score: float,
-    top_shap: list[ShapFeatureItem],
-    case1: str,
-    case2: str,
-    case3: str,
+def _shap_feature_to_plain_text(feature: str) -> str:
+    mapping = {
+        "V14": "unusual transaction pattern",
+        "V4": "abnormal spending amount",
+        "V17": "suspicious timing",
+        "V12": "spending spike",
+        "V3": "rapid successive transactions",
+        "V7": "device inconsistency",
+        "V10": "location anomaly",
+    }
+    return mapping.get(feature.upper(), "unusual activity")
+
+
+def build_compressed_prompt(
+    transaction: dict,
+    shap_features: list[dict],   # top 3 only, e.g. [{"feature": "amount", "value": 1.8}, ...]
+    graph_insight: str,           # single string summary from NetworkX
+    similar_cases: list[dict],    # top 2 from ChromaDB, each with "summary" key
 ) -> str:
-    factors = ", ".join(
-        f"{f.feature} (impact {f.impact:.6f})" for f in top_shap
+    # Compress SHAP to one line
+    shap_line = ", ".join(
+        f"{f['feature']}({f['value']:+.1f})" for f in shap_features[:3]
     )
-    return (
-        "You are a fraud analyst assistant. Based only on the retrieved \n"
-        "fraud cases below, explain in 2-3 plain English sentences why \n"
-        "this transaction is suspicious. Do not add information not present \n"
-        "in the cases or transaction data.\n"
-        "\n"
-        "Transaction details:\n"
-        f"- Amount: {amount}\n"
-        f"- Hour of day: {hour}\n"
-        f"- Top risk factors: {factors}\n"
-        f"- Risk score: {risk_score}/100\n"
-        "\n"
-        "Similar historical fraud cases:\n"
-        f"{case1}\n"
-        f"{case2}\n"
-        f"{case3}\n"
-        "\n"
-        "Explanation:"
+
+    # Compress each case to 80 tokens max — truncate hard
+    def truncate(text: str, max_chars: int = 320) -> str:
+        return text[:max_chars] + "..." if len(text) > max_chars else text
+
+    cases_block = "\n".join(
+        f"- {truncate(c['summary'])}" for c in similar_cases[:2]
     )
+
+    return f"""You are a fraud analyst assistant. Write exactly 2 sentences explaining why this transaction is suspicious. Be specific. No preamble.
+
+TRANSACTION: amount=${transaction['amount']}, merchant={transaction['merchant_category']}, location={transaction.get('location', 'unknown')}
+RISK SIGNALS: {shap_line}
+GRAPH: {graph_insight}
+SIMILAR CASES:
+{cases_block}
+
+2-sentence explanation:"""
 
 
 def _ollama_explain_chat(client: OllamaClient, prompt: str) -> str:
+    print("[EXPLAIN] Sending prompt to Mistral...")
     resp = client.chat(
         model="mistral:7b-instruct-q4_0",
         messages=[{"role": "user", "content": prompt}],
         stream=False,
     )
-    content = resp.message.content
-    if not content:
-        return ""
-    return str(content).strip()
+    try:
+        raw = resp["message"]["content"]
+    except (KeyError, TypeError):
+        try:
+            raw = resp.message.content
+        except Exception:
+            raw = str(resp)
+    explanation = str(raw).strip()
+    print("[EXPLAIN] Mistral responded:", explanation[:100])
+    if not explanation or len(explanation) < 20:
+        raise ValueError("Empty response from Mistral")
+    return explanation
 
 
 async def explain_transaction(
     body: ExplainRequest,
     collection: chromadb.Collection,
     ollama_client: OllamaClient,
+    graph: Any = None,
 ) -> ExplainResponse:
     search = _top_shap_search_string(body.shap_features, n=3)
     similar = _chroma_query_similar_cases(collection, search, k=3)
-    case1, case2, case3 = similar[0], similar[1], similar[2]
-    top3_shap = sorted(body.shap_features, key=lambda f: f.impact, reverse=True)[:3]
-    prompt = _build_explain_ollama_prompt(
-        body.amount,
-        body.hour,
-        body.risk_score,
-        top3_shap,
-        case1,
-        case2,
-        case3,
+    
+    # Get Graph Insights
+    graph_insights_payload = {
+        "amount": body.amount,
+        "hour": body.hour,
+        "merchant_category": body.merchant_category,
+        **body.features
+    }
+    graph_data = get_graph_insights(graph_insights_payload, graph) if graph else {"suspicious_links": []}
+    graph_insights = graph_data.get("suspicious_links", [])
+
+    similar_cases = [{"summary": s} for s in similar]
+    shap_dicts = [{"feature": f.feature, "value": f.value} for f in sorted(body.shap_features, key=lambda f: f.impact, reverse=True)[:3]]
+    graph_insight_str = "; ".join(graph_insights) if graph_insights else "None"
+    transaction = {
+        "amount": body.amount,
+        "merchant_category": body.merchant_category,
+        "location": f"V10({body.features.get('v10', '0.0')})"
+    }
+    
+    prompt = build_compressed_prompt(
+        transaction=transaction,
+        shap_features=shap_dicts,
+        graph_insight=graph_insight_str,
+        similar_cases=similar_cases,
     )
     try:
         explanation = await asyncio.wait_for(
             asyncio.to_thread(_ollama_explain_chat, ollama_client, prompt),
-            timeout=10.0,
+            timeout=30.0,
         )
         return ExplainResponse(
             transaction_id=body.transaction_id,
             explanation=explanation,
             similar_cases=similar[:3],
+            graph_insights=graph_insights,
             model="mistral:7b-instruct-q4_0",
         )
-    except Exception:
-        pass
-    factors = ", ".join(
-        f"{f.feature} (impact {f.impact:.4f})"
-        for f in sorted(body.shap_features, key=lambda x: -x.impact)[:5]
-    )
+    except Exception as exc:
+        print("[EXPLAIN] Mistral exception:", repr(exc))
     return ExplainResponse(
         transaction_id=body.transaction_id,
         explanation=(
-            "Flagged by hybrid model. Top factors: "
-            f"{factors}. Manual review recommended."
+            "This transaction was automatically flagged due to unusual \n"
+            "patterns in the transaction data. Please have a fraud analyst \n"
+            "review this case manually before taking action."
         ),
         similar_cases=[],
         model="fallback",
@@ -419,6 +458,8 @@ def _generate_and_score_synthetic_transaction(state: Any, rng: np.random.Generat
     payload["merchant_category"] = merchant_category
     payload["hour"] = hour
     payload["is_seeded"] = is_seeded
+    # Include features for graph reasoning in frontend/explanation
+    payload["features"] = {f"v{i}": data[f"v{i}"] for i in range(1, 29)}
     return payload
 
 
@@ -483,6 +524,86 @@ def register_routes(app: FastAPI) -> None:
             body,
             state.chroma_collection,
             state.ollama_client,
+            state.graph if hasattr(state, "graph") else None,
+        )
+
+    @app.post("/api/investigate/stream")
+    async def investigate_stream(body: ExplainRequest, request: Request) -> StreamingResponse:
+        state = request.app.state
+        collection = state.chroma_collection
+        graph = getattr(state, "graph", None)
+        
+        search = _top_shap_search_string(body.shap_features, n=3)
+        similar = _chroma_query_similar_cases(collection, search, k=2)
+        
+        graph_insights_payload = {
+            "amount": body.amount,
+            "hour": body.hour,
+            "merchant_category": body.merchant_category,
+            **body.features
+        }
+        graph_data = get_graph_insights(graph_insights_payload, graph) if graph else {"suspicious_links": []}
+        graph_insights = graph_data.get("suspicious_links", [])
+        graph_insight_str = "; ".join(graph_insights) if graph_insights else "None"
+        
+        similar_cases = [{"summary": s} for s in similar]
+        shap_dicts = [{"feature": f.feature, "value": f.value} for f in sorted(body.shap_features, key=lambda f: f.impact, reverse=True)[:3]]
+        transaction = {
+            "amount": body.amount,
+            "merchant_category": body.merchant_category,
+            "location": f"V10({body.features.get('v10', '0.0')})"
+        }
+        
+        prompt = build_compressed_prompt(
+            transaction=transaction,
+            shap_features=shap_dicts,
+            graph_insight=graph_insight_str,
+            similar_cases=similar_cases,
+        )
+
+        ollama_body = {
+            "model": "mistral:7b-instruct-q4_0",
+            "prompt": prompt,
+            "stream": True,
+            "options": {
+                "temperature": 0.2,
+                "num_predict": 120,
+            }
+        }
+
+        async def token_generator():
+            yield f"data: {json.dumps({'type': 'metadata', 'graph_insights': graph_insights, 'similar_cases': similar})}\n\n"
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream(
+                    "POST",
+                    "http://localhost:11434/api/generate",
+                    json=ollama_body,
+                ) as response:
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            token = chunk.get("response", "")
+                            done = chunk.get("done", False)
+
+                            if token:
+                                yield f"data: {json.dumps({'token': token})}\n\n"
+
+                            if done:
+                                yield f"data: {json.dumps({'done': True})}\n\n"
+                                break
+                        except json.JSONDecodeError:
+                            continue
+
+        return StreamingResponse(
+            token_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            }
         )
 
     @app.get("/stream")
@@ -535,14 +656,35 @@ async def _lifespan(app: FastAPI):
 
     app.state.ollama_client = OllamaClient(
         host="http://localhost:11434",
-        timeout=10.0,
+        timeout=30.0,
     )
     app.state.seeded_transaction_count = 0
+
+    # Pre-warm Ollama — loads model into GPU memory at startup
+    print("[startup] Pre-warming Ollama model...")
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            await client.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "mistral:7b-instruct-q4_0",     # match your model name exactly
+                    "prompt": "ready",
+                    "stream": False,
+                    "options": {"num_predict": 1}   # generate 1 token — just enough to load
+                }
+            )
+        print("[startup] Ollama warm ✓")
+    except Exception as e:
+        print(f"[startup] Ollama pre-warm failed: {e}")
 
     print("[LIFESPAN] Loading creditcard dataset for synthetic transaction streaming (10,000 rows max)")
     creditcard_path = root / "data" / "creditcard.csv"
     app.state.transactions_df = pd.read_csv(creditcard_path, nrows=10_000)
     print(f"[LIFESPAN] Loaded {len(app.state.transactions_df)} transactions for streaming")
+
+    print("[LIFESPAN] Building Knowledge Graph from transactions...")
+    app.state.graph = build_graph(app.state.transactions_df)
+    print("[LIFESPAN] Knowledge Graph ready with", app.state.graph.number_of_nodes(), "nodes")
 
     print("FraudSentinel backend ready")
     yield
@@ -569,6 +711,19 @@ def create_app() -> FastAPI:
 
 # Create app instance for uvicorn to use when imported (e.g., uvicorn main:app)
 app = create_app()
+
+
+async def test_ollama():
+    import ollama
+
+    try:
+        response = ollama.chat(
+            model="mistral:7b-instruct-q4_0",
+            messages=[{"role": "user", "content": "Say hello in one sentence."}],
+        )
+        print("[OLLAMA TEST] Success:", response['message']['content'])
+    except Exception as e:
+        print("[OLLAMA TEST] Failed:", str(e))
 
 
 if __name__ == "__main__":
