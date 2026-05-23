@@ -432,7 +432,7 @@ async def explain_transaction(
             explanation=explanation,
             similar_cases=similar[:3],
             graph_insights=graph_insights,
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
         )
     except Exception as exc:
         logger.error(f"Gemini API failed: {str(exc)}")
@@ -672,12 +672,12 @@ async def _lifespan(app: FastAPI):
     app.state.chroma_client = chroma_client
     app.state.chroma_collection = fraud_collection
 
-    load_dotenv()
+    load_dotenv(override=True)
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     if not gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY is not set in environment or .env")
     genai.configure(api_key=gemini_api_key)
-    app.state.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+    app.state.gemini_model = genai.GenerativeModel("gemini-2.5-flash")
     app.state.seeded_transaction_count = 0
 
     logger.info("Loading creditcard dataset for synthetic transaction streaming (max 10,000 rows)")
