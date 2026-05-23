@@ -31,7 +31,7 @@ import os
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
@@ -132,8 +132,8 @@ def load_chroma_collection(
 class ScoreRequest(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
-    transaction_id: str
-    amount: float
+    transaction_id: str = Field(..., min_length=1, max_length=50)
+    amount: float = Field(..., gt=0, lt=1000000)
     v1: float = Field(validation_alias=AliasChoices("v1", "V1"))
     v2: float = Field(validation_alias=AliasChoices("v2", "V2"))
     v3: float = Field(validation_alias=AliasChoices("v3", "V3"))
@@ -162,8 +162,15 @@ class ScoreRequest(BaseModel):
     v26: float = Field(validation_alias=AliasChoices("v26", "V26"))
     v27: float = Field(validation_alias=AliasChoices("v27", "V27"))
     v28: float = Field(validation_alias=AliasChoices("v28", "V28"))
-    hour: int = Field(ge=0, le=23)
+    hour: int = Field(..., ge=0, le=23)
     merchant_category: str | None = None
+
+    @field_validator('amount')
+    @classmethod
+    def validate_amount(cls, v: float) -> float:
+        if v <= 0 or v >= 1000000:
+            raise ValueError('Amount must be between 0 and 1,000,000 (exclusive of boundaries)')
+        return v
 
 
 class ShapFeatureItem(BaseModel):
@@ -184,14 +191,20 @@ class ScoreResponse(BaseModel):
 class ExplainRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    transaction_id: str
-    risk_score: float
+    transaction_id: str = Field(..., min_length=1, max_length=50)
+    risk_score: float = Field(..., ge=0, le=100)
     shap_features: list[ShapFeatureItem]
-    amount: float
-    hour: int = Field(ge=0, le=23)
+    amount: float = Field(..., gt=0)
+    hour: int = Field(..., ge=0, le=23)
     merchant_category: str | None = None
-    # Add v1-v28 for KG reasoning
     features: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator('features')
+    @classmethod
+    def validate_features(cls, v: dict[str, float]) -> dict[str, float]:
+        if len(v) == 0:
+            raise ValueError('Features cannot be empty')
+        return v
 
 
 class ExplainResponse(BaseModel):
@@ -689,10 +702,14 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            os.getenv("FRONTEND_URL", "http://localhost:8000")
+        ],
         allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-API-Key"],
     )
 
     static_dir = _project_root() / "static"
