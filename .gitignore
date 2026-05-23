@@ -1,11 +1,19 @@
+# Allow truncated dataset (now only 1.5MB)
 data/
+!data/creditcard.csv
+
 __pycache__/
 *.pyc
 .env
 fraudsentinel.log
 .venv/
 venv/
+
+# Allow trained models (5MB total)
+models/*.log
+!models/*.pkl
+!models/*.txt
+!models/*.json
+
+# Rebuild ChromaDB on deployment, don't track it
 chroma_db/
-models/*.pkl
-models/*.joblib
-*.log

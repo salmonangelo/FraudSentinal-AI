@@ -534,6 +534,15 @@ def main() -> None:
         joblib.dump(iso_model, models_dir / "iso_model.pkl")
         joblib.dump(amount_scaler, models_dir / "scaler.pkl")
         print("[MAIN] Models saved successfully")
+
+        # Fit MinMaxScaler on IsolationForest scores
+        print("[ISO] Fitting MinMaxScaler on training set scores")
+        X_train_scaled = X_train.to_numpy()
+        iso_train_scores = iso_model.decision_function(X_train_scaled)
+        iso_norm_scaler = MinMaxScaler()
+        iso_norm_scaler.fit(iso_train_scores.reshape(-1, 1))
+        joblib.dump(iso_norm_scaler, models_dir / "iso_norm_scaler.pkl")
+        print("[ISO] Saved iso_norm_scaler.pkl")
         
         # Run evaluation only during full training
         skip_evaluation = False

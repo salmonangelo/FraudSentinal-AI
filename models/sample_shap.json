@@ -1,25 +1,25 @@
 {
-  "test_row_index": 840,
+  "test_row_index": 42,
   "top_features": [
     {
       "feature": "V14",
-      "shap_value": 5.116015434265137
+      "shap_value": 5.060241222381592
     },
     {
-      "feature": "V17",
-      "shap_value": 1.638648509979248
+      "feature": "V12",
+      "shap_value": 2.751528739929199
     },
     {
       "feature": "V4",
-      "shap_value": 1.0045404434204102
+      "shap_value": 0.9011086225509644
     },
     {
-      "feature": "V7",
-      "shap_value": 0.7559663653373718
+      "feature": "V6",
+      "shap_value": 0.29521143436431885
     },
     {
-      "feature": "V10",
-      "shap_value": 0.6733775734901428
+      "feature": "V16",
+      "shap_value": -0.20158305764198303
     }
   ]
 }

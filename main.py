@@ -84,25 +84,12 @@ def _creditcard_feature_columns() -> list[str]:
     return [f"V{i}" for i in range(1, 29)] + ["Amount"]
 
 
-def _fit_iso_minmax_scaler(
-    iso_model: IsolationForest,
-    amount_scaler: StandardScaler,
-    creditcard_path: Path,
-    max_rows: int = 100_000,
-) -> MinMaxScaler | None:
-    # Fit MinMaxScaler on -decision_function(train-like rows) so IF scores map to [0, 1] at inference (matches train.py evaluation spirit).
-    if not creditcard_path.is_file():
-        return None
-    usecols = [f"V{i}" for i in range(1, 29)] + ["Amount"]
-    df = pd.read_csv(creditcard_path, usecols=usecols, nrows=max_rows)
-    amt_scaled = amount_scaler.transform(df[["Amount"]].values)
-    X_ref = np.hstack(
-        [df[[f"V{i}" for i in range(1, 29)]].values.astype(np.float64), amt_scaled]
-    )
-    raw = -iso_model.decision_function(X_ref)
-    mm = MinMaxScaler()
-    mm.fit(raw.reshape(-1, 1))
-    return mm
+def _load_iso_norm_scaler() -> MinMaxScaler:
+    models_dir = _project_root() / "models"
+    scaler_path = models_dir / "iso_norm_scaler.pkl"
+    if not scaler_path.exists():
+        raise FileNotFoundError("iso_norm_scaler.pkl not found")
+    return joblib.load(scaler_path)
 
 
 def load_models_and_scaler(
@@ -659,11 +646,7 @@ async def _lifespan(app: FastAPI):
     app.state.shap_explainer = joblib.load(models_dir / "shap_explainer.pkl")
     app.state.threshold = float((models_dir / "threshold.txt").read_text(encoding="utf-8").strip())
 
-    app.state.iso_norm_scaler = _fit_iso_minmax_scaler(
-        iso_model,
-        scaler,
-        root / "data" / "creditcard.csv",
-    )
+    app.state.iso_norm_scaler = _load_iso_norm_scaler()
 
     chroma_client, fraud_collection = load_chroma_collection(
         chroma_dir,
