@@ -17,7 +17,47 @@ let reconnectTimer = null;
 /** @type {HTMLTableRowElement | null} */
 let selectedRow = null;
 let selectedTransaction = null;
-const API_KEY = 'your_fraud_api_key_here';
+let apiKey = "";
+
+async function loadApiKey() {
+  const res = await fetch("/api/client-config");
+  if (!res.ok) {
+    throw new Error(`Failed to load API config (${res.status})`);
+  }
+  const data = await res.json();
+  apiKey = String(data.api_key || "");
+  if (!apiKey) {
+    throw new Error("API key missing in client config");
+  }
+}
+
+function ensureTransactionFeatures(payload) {
+  const existing = payload?.features;
+  if (existing && typeof existing === "object" && Object.keys(existing).length > 0) {
+    return existing;
+  }
+  const features = {};
+  for (let i = 1; i <= 28; i++) {
+    const vk = `v${i}`;
+    const Vk = `V${i}`;
+    if (payload[vk] != null && Number.isFinite(Number(payload[vk]))) {
+      features[vk] = Number(payload[vk]);
+    } else if (payload[Vk] != null && Number.isFinite(Number(payload[Vk]))) {
+      features[vk] = Number(payload[Vk]);
+    }
+  }
+  if (Object.keys(features).length > 0) {
+    return features;
+  }
+  const shap = Array.isArray(payload?.shap_features) ? payload.shap_features : [];
+  for (const item of shap) {
+    const name = String(item?.feature || "").toLowerCase();
+    if (/^v\d+$/.test(name) && Number.isFinite(Number(item.value))) {
+      features[name] = Number(item.value);
+    }
+  }
+  return features;
+}
 
 function formatUsd(amount) {
   const n = Number(amount);
@@ -270,14 +310,14 @@ async function postExplainForPayload(payload) {
     hour: Number(payload.hour),
     merchant_category:
       payload.merchant_category != null ? String(payload.merchant_category) : "",
-    features: payload.features || {},
+    features: ensureTransactionFeatures(payload),
   };
   try {
     const res = await fetch("/api/investigate/stream", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": API_KEY,
+        "X-API-Key": apiKey,
       },
       body: JSON.stringify(body),
     });
@@ -586,7 +626,7 @@ function openEventSource() {
   fetch(url, {
     method: "GET",
     headers: {
-      "X-API-Key": API_KEY,
+      "X-API-Key": apiKey,
     },
     signal,
   })
@@ -637,13 +677,23 @@ function openEventSource() {
     });
 }
 
-function bootstrapDashboard() {
+async function bootstrapDashboard() {
   formatClock();
   setInterval(formatClock, 1000);
   setConnectionStatus("idle");
 
   wireFeedClickDelegation();
-  openEventSource();
+  try {
+    await loadApiKey();
+    openEventSource();
+  } catch (err) {
+    console.error("Dashboard auth setup failed:", err);
+    setConnectionStatus("idle");
+    const dot = document.getElementById("status-dot");
+    if (dot) dot.title = "API key not configured — check .env FRAUD_API_KEY";
+  }
 }
 
-window.addEventListener("DOMContentLoaded", bootstrapDashboard);
+window.addEventListener("DOMContentLoaded", () => {
+  void bootstrapDashboard();
+});

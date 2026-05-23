@@ -1,9 +1,13 @@
 import httpx
 import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 url = "http://127.0.0.1:8000/api/investigate/stream"
 headers = {
-    "X-API-Key": "your_fraud_api_key_here",
+    "X-API-Key": os.getenv("FRAUD_API_KEY", ""),
     "Content-Type": "application/json"
 }
 

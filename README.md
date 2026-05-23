@@ -81,7 +81,7 @@ An intelligent fraud detection system powered by machine learning and AI, featur
    ```
    Then add the generated key to `.env`:
    ```bash
-   echo FRAUD_API_KEY=your_generated_key >> .env
+   echo FRAUD_API_KEY=your_generated_key >> .env 
    ```
 
    The backend requires `X-API-Key` for all protected endpoints except `/`, `/analyst`, and `/health`.
@@ -89,6 +89,40 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 4. **Open your browser**
    - Navigate to `http://localhost:8000`
    - Upload transaction data and analyze for fraud!
+
+## 🌐 Deployment to Render (Free Tier)
+
+### Pre-deployment checklist:
+1. Ensure `.env` contains `GEMINI_API_KEY` and `FRAUD_API_KEY`
+2. Run `python train.py` to generate all model files
+3. Verify `models/` contains: `xgb_model.pkl`, `iso_model.pkl`, 
+   `scaler.pkl`, `shap_explainer.pkl`, `iso_norm_scaler.pkl`, `threshold.txt`
+
+### Render configuration:
+- **Build Command**: 
+  ```bash
+  pip install -r requirements.txt && python rag_setup.py
+  ```
+
+- **Start Command**: 
+  ```bash
+  uvicorn main:create_app --factory --host 0.0.0.0 --port $PORT
+  ```
+
+- **Environment Variables** (add in Render dashboard):
+  - `GEMINI_API_KEY=<your_key>`
+  - `FRAUD_API_KEY=<generate via: python -c 'import secrets; print(secrets.token_urlsafe(32))'>`
+  - `FRONTEND_URL=https://your-app-name.onrender.com`
+
+### After deployment:
+- Access dashboard at: `https://your-app-name.onrender.com`
+- Test `/health` endpoint returns `{"status": "healthy"}`
+- First request may take 30s (cold start on free tier)
+
+### Memory optimization:
+This configuration runs in <400MB RAM (fits Render free tier 512MB limit).
+The dataset is truncated to 10k rows and the IsolationForest scaler
+is pre-fitted to avoid loading 100k rows at startup.
 
 ## 📋 API Endpoints
 

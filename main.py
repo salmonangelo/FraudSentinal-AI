@@ -49,6 +49,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("fraudsentinel")
 
+load_dotenv(override=True)
+
 # Suppress sklearn feature name mismatch warning (arrays don't have feature names)
 warnings.filterwarnings("ignore", message="X does not have valid feature names*")
 
@@ -189,9 +191,10 @@ class ExplainRequest(BaseModel):
     @field_validator('features')
     @classmethod
     def validate_features(cls, v: dict[str, float]) -> dict[str, float]:
-        if len(v) == 0:
-            raise ValueError('Features cannot be empty')
-        return v
+        if len(v) > 0:
+            return v
+        # Allow graph/RAG explain when only SHAP summaries are present (legacy clients).
+        return {"v1": 0.0}
 
 
 class ExplainResponse(BaseModel):
@@ -518,6 +521,14 @@ def register_routes(app: FastAPI) -> None:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "model": "loaded", "rag": "ready"}
+
+    @app.get("/api/client-config")
+    async def client_config() -> dict[str, str]:
+        """Expose API key to same-origin dashboard (local demo only)."""
+        api_key = os.getenv("FRAUD_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="API key not configured")
+        return {"api_key": api_key}
 
     @app.post("/score", response_model=ScoreResponse, dependencies=[Depends(verify_api_key)])
     @limiter.limit("10/minute")

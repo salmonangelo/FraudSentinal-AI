@@ -460,6 +460,38 @@
       }
       updateClock(); setInterval(updateClock, 1000);
 
+      let apiKey = "";
+      async function loadApiKey() {
+        const res = await fetch("/api/client-config");
+        if (!res.ok) throw new Error(`config ${res.status}`);
+        const data = await res.json();
+        apiKey = String(data.api_key || "");
+        if (!apiKey) throw new Error("missing api key");
+      }
+
+      function ensureTransactionFeatures(tx) {
+        const existing = tx?.features;
+        if (existing && typeof existing === "object" && Object.keys(existing).length > 0) {
+          return existing;
+        }
+        const features = {};
+        for (let i = 1; i <= 28; i++) {
+          const vk = `v${i}`;
+          const Vk = `V${i}`;
+          if (tx[vk] != null && Number.isFinite(Number(tx[vk]))) features[vk] = Number(tx[vk]);
+          else if (tx[Vk] != null && Number.isFinite(Number(tx[Vk]))) features[vk] = Number(tx[Vk]);
+        }
+        if (Object.keys(features).length > 0) return features;
+        const shap = Array.isArray(tx?.shap_features) ? tx.shap_features : [];
+        for (const item of shap) {
+          const name = String(item?.feature || "").toLowerCase();
+          if (/^v\d+$/.test(name) && Number.isFinite(Number(item.value))) {
+            features[name] = Number(item.value);
+          }
+        }
+        return features;
+      }
+
       // Parse URL params
       const params = new URLSearchParams(window.location.search);
       const txnId = params.get('txn_id') || 'N/A';
@@ -581,6 +613,7 @@
           return;
         }
         try {
+          await loadApiKey();
           const body = {
             transaction_id: payload.transaction_id || txnId,
             risk_score: Number(payload.risk_score || score),
@@ -588,7 +621,7 @@
             amount: Number(payload.amount || amount),
             hour: Number(payload.hour || hour),
             merchant_category: payload.merchant_category || merchant,
-            features: payload.features || {},
+            features: ensureTransactionFeatures(payload),
           };
 
           const container = document.getElementById('explanation-content');
@@ -606,10 +639,13 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "X-API-Key": "your_fraud_api_key_here",
+              "X-API-Key": apiKey,
             },
             body: JSON.stringify(body),
           });
+          if (!response.ok) {
+            throw new Error(`investigate stream ${response.status}`);
+          }
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
