@@ -17,6 +17,12 @@
   --grid-line: #1e2d3d;
   --header-h: 32px;
   --footer-h: 24px;
+  /* Responsive layout tokens */
+  --panel-side-w: clamp(240px, 22vw, 300px);
+  --panel-center-w: clamp(220px, 20vw, 280px);
+  --space-page: clamp(0.5rem, 2vw, 1rem);
+  --font-stat: clamp(14px, 2.5vw, 18px);
+  --font-risk: clamp(22px, 5vw, 28px);
 }
 
 *,
@@ -26,12 +32,17 @@
 }
 
 html {
-  min-width: 1280px;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: clip;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   background: var(--bg-primary);
   background-image:
@@ -130,25 +141,29 @@ body {
 
 .stat-value {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 18px;
+  font-size: var(--font-stat);
   font-weight: 600;
   color: var(--accent);
   margin: 0;
 }
 
-/* Main Layout */
+/* Main Layout — fluid 3-column dashboard (feed | threat/SHAP | detail) */
 .main-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: calc(100vw - 560px) 280px 280px;
+  grid-template-columns: minmax(0, 1fr) var(--panel-center-w) var(--panel-side-w);
+  grid-template-areas: "feed center right";
   gap: 0;
   padding: 0;
   min-height: 0;
-  width: 100vw;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Left Column: Transaction Feed */
 .column-feed {
+  grid-area: feed;
+  min-width: 0;
   border-right: 1px solid var(--grid-line);
   display: flex;
   flex-direction: column;
@@ -179,6 +194,9 @@ body {
 .table-wrap {
   flex: 1;
   overflow: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
   background: var(--bg-primary);
 }
 
@@ -186,7 +204,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
+  font-size: clamp(10px, 2.5vw, 12px);
 }
 
 .feed-table thead {
@@ -297,12 +315,14 @@ body {
 
 /* Center Column: Threat Level & Feature Attribution */
 .column-center {
+  grid-area: center;
+  min-width: 0;
   border-right: 1px solid var(--grid-line);
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: var(--space-page);
   background: var(--bg-secondary);
-  gap: 16px;
+  gap: clamp(12px, 2vw, 16px);
   overflow: hidden;
 }
 
@@ -324,7 +344,8 @@ body {
 .threat-bar {
   display: flex;
   flex-direction: column;
-  height: 100px;
+  height: clamp(80px, 18vw, 100px);
+  min-height: 80px;
   border: 1px solid var(--grid-line);
   background: var(--bg-panel);
   overflow: hidden;
@@ -376,7 +397,7 @@ body {
 
 .risk-display {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 28px;
+  font-size: var(--font-risk);
   font-weight: 600;
   color: var(--accent);
   text-align: center;
@@ -462,11 +483,13 @@ body {
 
 /* Right Column: Selected Transaction Detail Panel */
 .column-right {
+  grid-area: right;
+  min-width: 0;
   border-left: 1px solid var(--grid-line);
   display: flex;
   flex-direction: column;
-  width: 280px;
-  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
   background: var(--bg-secondary);
 }
 
@@ -474,10 +497,11 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 16px;
+  padding: var(--space-page);
+  gap: clamp(12px, 2vw, 16px);
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .right-panel.hidden {
@@ -665,8 +689,9 @@ body {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
   background: rgba(8, 12, 20, 0.8);
   backdrop-filter: blur(4px);
   z-index: 1000;
@@ -822,12 +847,13 @@ body {
 
 /* Action Buttons */
 .action-btn {
-  padding: 0;
-  height: 36px;
+  padding: 0.75rem 1rem;
+  min-height: 36px;
+  height: auto;
   border: none;
   border-radius: 2px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: clamp(10px, 2.5vw, 11px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -835,6 +861,8 @@ body {
   transition: opacity 0.2s;
   color: white;
   white-space: nowrap;
+  width: 100%;
+  touch-action: manipulation;
 }
 
 .action-btn:hover {
@@ -907,10 +935,276 @@ body {
 
 .footer-text {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 8px;
+  font-size: clamp(7px, 2vw, 8px);
   color: var(--text-secondary);
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  line-height: 1.4;
+  padding: 0 0.5rem;
+}
+
+/* ==========================================================================
+   RESPONSIVE DASHBOARD — frontend layout only (breakpoints: 1440 / 1024 / 768 / 480)
+   ========================================================================== */
+
+/* Large desktop: slightly wider side panels */
+@media (min-width: 1440px) {
+  :root {
+    --panel-side-w: clamp(280px, 18vw, 320px);
+    --panel-center-w: clamp(260px, 16vw, 300px);
+  }
+
+  .main-layout {
+    grid-template-columns: minmax(0, 1fr) var(--panel-center-w) var(--panel-side-w);
+  }
+}
+
+/* Laptop / small desktop: tighten side columns */
+@media (max-width: 1439px) and (min-width: 1025px) {
+  :root {
+    --panel-side-w: clamp(220px, 24vw, 280px);
+    --panel-center-w: clamp(200px, 22vw, 260px);
+  }
+}
+
+/* Tablet: feed full width; threat + detail side by side */
+@media (max-width: 1024px) {
+  .main-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "feed feed"
+      "center right";
+  }
+
+  .column-feed {
+    border-right: none;
+    border-bottom: 1px solid var(--grid-line);
+    max-height: min(50vh, 28rem);
+  }
+
+  .column-center {
+    border-right: 1px solid var(--grid-line);
+  }
+
+  .column-right {
+    border-left: none;
+  }
+
+  .stats-bar {
+    flex-wrap: wrap;
+  }
+
+  .stat-group {
+    flex: 1 1 calc(50% - 1px);
+    min-width: 8rem;
+  }
+}
+
+/* Mobile landscape / large phone: single column stack */
+@media (max-width: 768px) {
+  .app-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.35rem 0.75rem;
+    min-height: auto;
+    padding: 0.5rem var(--space-page);
+  }
+
+  .header-left {
+    font-size: clamp(11px, 3.2vw, 14px);
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .header-center {
+    display: none;
+  }
+
+  .header-right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    font-size: clamp(8px, 2.2vw, 10px);
+    gap: 0.35rem;
+  }
+
+  .main-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "feed"
+      "center"
+      "right";
+  }
+
+  .column-feed {
+    max-height: none;
+    min-height: min(42vh, 22rem);
+  }
+
+  .column-center,
+  .column-right {
+    border-right: none;
+    border-left: none;
+    border-bottom: 1px solid var(--grid-line);
+  }
+
+  .column-right {
+    border-bottom: none;
+  }
+
+  .threat-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 0;
+  }
+
+  .threat-segment {
+    flex: 1 1 calc(33.333% - 2px);
+    min-height: 2.25rem;
+    border-bottom: none;
+    border-right: 1px solid var(--grid-line);
+    font-size: clamp(6px, 1.8vw, 7px);
+  }
+
+  .threat-segment:nth-child(3n) {
+    border-right: none;
+  }
+
+  .threat-segment:last-child {
+    border-right: none;
+  }
+
+  .stat-group {
+    flex: 1 1 50%;
+    border-bottom: 1px solid var(--grid-line);
+  }
+
+  .stat-group:nth-child(2n) {
+    border-right: none;
+  }
+
+  .feed-table {
+    min-width: 36rem;
+  }
+
+  .feed-table th,
+  .feed-table td {
+    padding: 0.35rem 0.4rem;
+  }
+
+  .header-txn-id {
+    font-size: 9px;
+    word-break: break-all;
+    text-align: right;
+    max-width: 55%;
+  }
+
+  .modal-content {
+    width: min(94vw, 600px);
+    max-height: 85dvh;
+  }
+
+  .modal-body {
+    padding: 1rem;
+    font-size: clamp(11px, 3vw, 13px);
+  }
+
+  .action-btn {
+    min-height: 44px;
+  }
+
+  .analysis-link {
+    padding: 0.5rem 0;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Small mobile: compact stats, full-width panels */
+@media (max-width: 480px) {
+  :root {
+    --space-page: 0.75rem;
+  }
+
+  .stats-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stat-group {
+    flex: none;
+    border-right: 1px solid var(--grid-line);
+    padding: 0.5rem 0.35rem;
+  }
+
+  .stat-group:nth-child(2n) {
+    border-right: none;
+  }
+
+  .stat-group:last-child {
+    grid-column: 1 / -1;
+    border-right: none;
+    border-top: 1px solid var(--grid-line);
+  }
+
+  .stat-label {
+    font-size: 7px;
+  }
+
+  .column-feed {
+    min-height: 16rem;
+  }
+
+  .threat-segment {
+    flex: 1 1 50%;
+  }
+
+  .threat-segment:nth-child(3n) {
+    border-right: 1px solid var(--grid-line);
+  }
+
+  .threat-segment:nth-child(2n) {
+    border-right: none;
+  }
+
+  .shap-name {
+    width: 2.75rem;
+    font-size: 8px;
+  }
+
+  .shap-value {
+    width: 2.25rem;
+    font-size: 8px;
+  }
+
+  .empty-state {
+    padding: 1rem;
+  }
+
+  .app-footer {
+    padding: 0.5rem;
+    min-height: auto;
+  }
+}
+
+/* Short landscape phones: limit feed height so panels stay reachable */
+@media (max-width: 768px) and (orientation: landscape) {
+  .column-feed {
+    min-height: 12rem;
+    max-height: 45vh;
+  }
+
+  .main-layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-areas:
+      "feed feed"
+      "center right";
+  }
 }
