@@ -17,6 +17,7 @@ let reconnectTimer = null;
 /** @type {HTMLTableRowElement | null} */
 let selectedRow = null;
 let selectedTransaction = null;
+const API_KEY = 'your_fraud_api_key_here';
 
 function formatUsd(amount) {
   const n = Number(amount);
@@ -274,9 +275,21 @@ async function postExplainForPayload(payload) {
   try {
     const res = await fetch("/api/investigate/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": API_KEY,
+      },
       body: JSON.stringify(body),
     });
+    if (!res.ok) {
+      box.classList.remove("loading");
+      if (res.status === 429) {
+        box.textContent = "Rate limit reached. Please wait 60 seconds.";
+      } else {
+        box.textContent = `Request failed with status ${res.status}`;
+      }
+      return;
+    }
     box.textContent = "";
     box.classList.remove("loading");
     box.classList.add("streaming");
@@ -560,36 +573,68 @@ function openEventSource() {
     eventSource.close();
     eventSource = null;
   }
+
+  const controller = new AbortController();
   const url = `${window.location.origin}/stream`;
-  const es = new EventSource(url);
-  eventSource = es;
+  const signal = controller.signal;
+  let buffer = "";
 
-  es.addEventListener("open", () => {
-    if (reconnectTimer != null) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    setConnectionStatus("live");
-  });
+  eventSource = {
+    close: () => controller.abort(),
+  };
 
-  es.onmessage = (ev) => {
-    try {
-      const payload = JSON.parse(ev.data);
-      if (payload.error) {
-        console.warn("Stream payload error:", payload.error);
-        return;
+  fetch(url, {
+    method: "GET",
+    headers: {
+      "X-API-Key": API_KEY,
+    },
+    signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error("Rate limit reached. Please wait 60 seconds.");
+        }
+        throw new Error(`Stream request failed: ${response.status}`);
       }
-      handleStreamPayload(payload);
-    } catch (e) {
-      console.warn("Invalid SSE JSON", e);
-    }
-  };
+      if (reconnectTimer != null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      setConnectionStatus("live");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-  es.onerror = () => {
-    es.close();
-    eventSource = null;
-    scheduleReconnect();
-  };
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const payload = JSON.parse(line.slice(6));
+            if (payload.error) {
+              console.warn("Stream payload error:", payload.error);
+              continue;
+            }
+            handleStreamPayload(payload);
+          } catch (e) {
+            console.warn("Invalid SSE JSON", e);
+          }
+        }
+      }
+      scheduleReconnect();
+    })
+    .catch((error) => {
+      if (signal.aborted) return;
+      console.warn("Stream fetch error:", error);
+      scheduleReconnect();
+    });
 }
 
 function bootstrapDashboard() {

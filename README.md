@@ -75,7 +75,18 @@ An intelligent fraud detection system powered by machine learning and AI, featur
    uvicorn main:create_app --factory --reload --port 8000
    ```
 
-3. **Open your browser**
+3. **Add API key authentication**
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+   Then add the generated key to `.env`:
+   ```bash
+   echo FRAUD_API_KEY=your_generated_key >> .env
+   ```
+
+   The backend requires `X-API-Key` for all protected endpoints except `/`, `/analyst`, and `/health`.
+
+4. **Open your browser**
    - Navigate to `http://localhost:8000`
    - Upload transaction data and analyze for fraud!
 
@@ -87,6 +98,28 @@ An intelligent fraud detection system powered by machine learning and AI, featur
 | `/upload` | POST | Upload CSV for analysis |
 | `/analyze` | POST | Analyze transactions |
 | `/similar-cases` | GET | Find similar fraud cases |
+
+## 🔐 Authentication
+
+All protected API endpoints requires an `X-API-Key` header.
+Generate a key with:
+```bash
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+Add it to `.env` as:
+```bash
+FRAUD_API_KEY=<generated_key>
+```
+The frontend uses this key automatically for demo purposes.
+
+## ⏱️ Rate Limiting
+
+API endpoints are protected with rate limiting to prevent abuse:
+- **Scoring endpoints** (`POST /score`, `POST /explain`, `POST /api/investigate/stream`): **10 requests/minute**
+- **Streaming endpoint** (`GET /stream`): **60 requests/minute** (higher limit for real-time updates)
+- **Public endpoints** (`GET /`, `GET /analyst`, `GET /health`): **Unlimited**
+
+When a rate limit is exceeded, the server returns a **429 (Too Many Requests)** status with the message: "Rate limit reached. Please wait 60 seconds."
 
 ## 🏗️ Project Structure
 

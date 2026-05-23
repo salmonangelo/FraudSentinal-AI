@@ -603,7 +603,12 @@
           const metaContentEl = document.getElementById('meta-content');
 
           const response = await fetch("/api/investigate/stream", {
-            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": "your_fraud_api_key_here",
+            },
+            body: JSON.stringify(body),
           });
 
           const reader = response.body.getReader();

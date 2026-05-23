@@ -19,13 +19,16 @@ import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -35,6 +38,16 @@ from graph_module import build_graph, get_graph_insights
 
 # Suppress sklearn feature name mismatch warning (arrays don't have feature names)
 warnings.filterwarnings("ignore", message="X does not have valid feature names*")
+
+async def verify_api_key(x_api_key: str = Header(...)) -> str:
+    expected_key = os.getenv("FRAUD_API_KEY")
+    if not expected_key:
+        raise HTTPException(status_code=500, detail="API key not configured")
+    if x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return x_api_key
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 MERCHANT_CATEGORIES = [
@@ -493,7 +506,8 @@ def register_routes(app: FastAPI) -> None:
     async def health() -> dict[str, str]:
         return {"status": "ok", "model": "loaded", "rag": "ready"}
 
-    @app.post("/score", response_model=ScoreResponse)
+    @app.post("/score", response_model=ScoreResponse, dependencies=[Depends(verify_api_key)])
+    @limiter.limit("10/minute")
     async def score_endpoint(body: ScoreRequest, request: Request) -> ScoreResponse:
         state = request.app.state
         out = score_transaction(
@@ -508,7 +522,8 @@ def register_routes(app: FastAPI) -> None:
         )
         return ScoreResponse.model_validate(out)
 
-    @app.post("/explain", response_model=ExplainResponse)
+    @app.post("/explain", response_model=ExplainResponse, dependencies=[Depends(verify_api_key)])
+    @limiter.limit("10/minute")
     async def explain_endpoint(body: ExplainRequest, request: Request) -> ExplainResponse:
         state = request.app.state
         return await explain_transaction(
@@ -518,7 +533,8 @@ def register_routes(app: FastAPI) -> None:
             state.graph if hasattr(state, "graph") else None,
         )
 
-    @app.post("/api/investigate/stream")
+    @app.post("/api/investigate/stream", dependencies=[Depends(verify_api_key)])
+    @limiter.limit("10/minute")
     async def investigate_stream(body: ExplainRequest, request: Request) -> StreamingResponse:
         state = request.app.state
         collection = state.chroma_collection
@@ -570,7 +586,8 @@ def register_routes(app: FastAPI) -> None:
             }
         )
 
-    @app.get("/stream")
+    @app.get("/stream", dependencies=[Depends(verify_api_key)])
+    @limiter.limit("60/minute")
     async def stream_synthetic_scores(request: Request) -> StreamingResponse:
         return StreamingResponse(
             synthetic_transaction_sse_stream(request),
@@ -642,6 +659,9 @@ async def _lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     # Construct FastAPI app, mount static files, register routes, and attach lifespan hooks to load models and Chroma once.
     app = FastAPI(title="FraudSentinel", lifespan=_lifespan)
+    
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     app.add_middleware(
         CORSMiddleware,
