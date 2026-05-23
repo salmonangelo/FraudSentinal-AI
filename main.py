@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import sys
 import time
 import warnings
 from collections.abc import AsyncIterator
@@ -35,6 +37,17 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from rag_setup import DeterministicEmbeddingFunction
 from graph_module import build_graph, get_graph_insights
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('fraudsentinel.log')
+    ]
+)
+logger = logging.getLogger("fraudsentinel")
 
 # Suppress sklearn feature name mismatch warning (arrays don't have feature names)
 warnings.filterwarnings("ignore", message="X does not have valid feature names*")
@@ -260,7 +273,7 @@ def score_transaction(
         ]
     except Exception as e:
         # If SHAP fails or times out, return empty list instead of hanging
-        print(f"[SCORE] Warning: SHAP computation failed ({str(e)[:50]}), skipping features")
+        logger.warning(f"SHAP computation failed: {str(e)[:50]}, skipping features")
         shap_features = []
 
     processing_ms = int((time.perf_counter() - t0) * 1000)
@@ -353,10 +366,10 @@ SIMILAR CASES:
 
 
 def _gemini_explain(model: Any, prompt: str) -> str:
-    print("[EXPLAIN] Sending prompt to Gemini...")
+    logger.info("Sending explanation prompt to Gemini API")
     response = model.generate_content(prompt)
     explanation = str(getattr(response, "text", "")).strip()
-    print("[EXPLAIN] Gemini responded:", explanation[:100])
+    logger.info(f"Gemini responded with explanation (length: {len(explanation)})")
     if not explanation or len(explanation) < 20:
         raise ValueError("Empty response from Gemini")
     return explanation
@@ -409,7 +422,7 @@ async def explain_transaction(
             model="gemini-1.5-flash",
         )
     except Exception as exc:
-        print("[EXPLAIN] Gemini exception:", repr(exc))
+        logger.error(f"Gemini API failed: {str(exc)}")
     return ExplainResponse(
         transaction_id=body.transaction_id,
         explanation=(
@@ -509,6 +522,7 @@ def register_routes(app: FastAPI) -> None:
     @app.post("/score", response_model=ScoreResponse, dependencies=[Depends(verify_api_key)])
     @limiter.limit("10/minute")
     async def score_endpoint(body: ScoreRequest, request: Request) -> ScoreResponse:
+        client_ip = request.client.host if request.client else "unknown"
         state = request.app.state
         out = score_transaction(
             body,
@@ -520,22 +534,30 @@ def register_routes(app: FastAPI) -> None:
             state.shap_explainer,
             state.threshold,
         )
-        return ScoreResponse.model_validate(out)
+        result = ScoreResponse.model_validate(out)
+        logger.info(f"Scored transaction: verdict={result.verdict}, risk_score={result.risk_score}, client_ip={client_ip}")
+        return result
 
     @app.post("/explain", response_model=ExplainResponse, dependencies=[Depends(verify_api_key)])
     @limiter.limit("10/minute")
     async def explain_endpoint(body: ExplainRequest, request: Request) -> ExplainResponse:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"Generating explanation for transaction, client_ip={client_ip}")
         state = request.app.state
-        return await explain_transaction(
+        result = await explain_transaction(
             body,
             state.chroma_collection,
             state.gemini_model,
             state.graph if hasattr(state, "graph") else None,
         )
+        logger.info(f"Explanation generated successfully, client_ip={client_ip}")
+        return result
 
     @app.post("/api/investigate/stream", dependencies=[Depends(verify_api_key)])
     @limiter.limit("10/minute")
     async def investigate_stream(body: ExplainRequest, request: Request) -> StreamingResponse:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"Streaming investigation for transaction, client_ip={client_ip}")
         state = request.app.state
         collection = state.chroma_collection
         graph = getattr(state, "graph", None)
@@ -589,6 +611,8 @@ def register_routes(app: FastAPI) -> None:
     @app.get("/stream", dependencies=[Depends(verify_api_key)])
     @limiter.limit("60/minute")
     async def stream_synthetic_scores(request: Request) -> StreamingResponse:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"SSE stream connection established, client_ip={client_ip}")
         return StreamingResponse(
             synthetic_transaction_sse_stream(request),
             media_type="text/event-stream",
@@ -643,16 +667,16 @@ async def _lifespan(app: FastAPI):
     app.state.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
     app.state.seeded_transaction_count = 0
 
-    print("[LIFESPAN] Loading creditcard dataset for synthetic transaction streaming (10,000 rows max)")
+    logger.info("Loading creditcard dataset for synthetic transaction streaming (max 10,000 rows)")
     creditcard_path = root / "data" / "creditcard.csv"
     app.state.transactions_df = pd.read_csv(creditcard_path, nrows=10_000)
-    print(f"[LIFESPAN] Loaded {len(app.state.transactions_df)} transactions for streaming")
+    logger.info(f"Loaded {len(app.state.transactions_df)} transactions for streaming")
 
-    print("[LIFESPAN] Building Knowledge Graph from transactions...")
+    logger.info("Building Knowledge Graph from transactions...")
     app.state.graph = build_graph(app.state.transactions_df)
-    print("[LIFESPAN] Knowledge Graph ready with", app.state.graph.number_of_nodes(), "nodes")
+    logger.info(f"Knowledge Graph ready with {app.state.graph.number_of_nodes()} nodes")
 
-    print("FraudSentinel backend ready")
+    logger.info("FraudSentinel backend started successfully")
     yield
 
 
